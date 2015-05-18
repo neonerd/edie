@@ -1,5 +1,7 @@
 module.exports =
 
-	dispatch : (req, res) ->
+	get :
 
-		res.send {version : '0.2.5'}
+		dispatch : (req, res) ->
+
+			res.send {version : '0.2.5'}

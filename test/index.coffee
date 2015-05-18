@@ -1,8 +1,8 @@
 # -- dependencies
 
-express = require "express"
+#express = require "express"
 chai = require "chai"
-srvc = require "../src"
+edie = require "../src"
 
 # -- test tools
 
