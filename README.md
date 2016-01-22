@@ -1,8 +1,6 @@
 Edie
 ====
 
-WORK IN PROGRESS
-
 Edie is a convention-over-configuration Express controllers layer.
 
 It allows developers to rapidly create functional REST APIs / web applications.
@@ -12,13 +10,16 @@ Conventions are primarily based around the {json:api} standard.
 Installation
 ====
 
+```
 npm install edie --save
+```
 
 Quickstart
 ====
 
 Edie gets initialized by calling its root function with an Express app and configuration object as a parameters.
 
+```javascript
 var edie = require('edie');
 var app = require('express')();
 
@@ -26,6 +27,7 @@ edie(app, {controllersDir : __dirname + '/controllers'});
 app.listen(300);
 
 console.log('Server is up, listening at 3000');
+```
 
 How does it work?
 ====
