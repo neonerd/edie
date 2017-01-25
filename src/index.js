@@ -165,6 +165,15 @@ const traverseDirectories = function (startingDirectory, previousDirectories, in
 }
 
 /**
+ * Transforms a path-route string into koaRouter route string
+ * @param  {[type]} rawRoute [description]
+ * @return {[type]}          [description]
+ */
+const transformRawRoute = function (rawRoute) {
+  return rawRoute.replace(DEFAULTS.PARAMETER_ROUTE_PREFIX, ':')
+}
+
+/**
  * Inject the behaviours into the app using koa-router
  * ! Mutates the app object
  * @param  {[type]} directory [description]
@@ -178,7 +187,7 @@ const edie = function (directory, koaApp) {
   // now we apply each behaviour and its middleware via koa-router
   const router = koaRouter()
   behaviours.map(behaviour => {
-    router[behaviour.method](behaviour.rawRoute, ...behaviour.middleware)
+    router[behaviour.method](transformRawRoute(behaviour.rawRoute), ...behaviour.middleware)
   })
   koaApp.use(router.routes())
   koaApp.use(router.allowedMethods())
