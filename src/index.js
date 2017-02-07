@@ -6,7 +6,7 @@ const DEFAULTS = {
   // scope is separated for files
   BEHAVIOUR_NAME_SEPARATOR: '.',
   // if a directory begins with this, it's treated as :name in the route
-  PARAMETER_ROUTE_PREFIX: '_',
+  PARAMETER_ROUTE_PREFIX: /_/g,
   // root behaviour name
   ROOT_FILE: 'index'
 }
