@@ -63,8 +63,12 @@ const behaviourStructure = function (fileName, previousDirectories, rootDirector
   // fetch the middleware and tags to use
   let middleware = []
   let tags = []
-  const behaviourExport = require(path.join(rootDirectory, previousDirectories.join('/'), fileName))
-  
+
+  let behaviourExport = require(path.join(rootDirectory, previousDirectories.join('/'), fileName))
+  if (behaviourExport.default !== undefined) {
+    behaviourExport = behaviourExport.default
+  }
+
   if (typeof behaviourExport === 'function') {
     middleware.push(behaviourExport)
   } else {
@@ -187,7 +191,23 @@ const edie = function (directory, koaApp) {
   // now we apply each behaviour and its middleware via koa-router
   const router = koaRouter()
   behaviours.map(behaviour => {
-    router[behaviour.method](transformRawRoute(behaviour.rawRoute), ...behaviour.middleware)
+    /**
+     * This monstrosity is here because the current version of koa-router does not terminate routing at the first match, so all routes matching can get executed.
+     * This is NOT the preferred behaviours, if there is a /user/:id and /user/deleteAll, the latter one should take precedence
+     * Therefore, we create our wrapper generator function that executes the behaviour middleware in order, without the behaviour "polluting" the koa-router next function
+     */
+    router[behaviour.method](transformRawRoute(behaviour.rawRoute), function * (next) {
+      let stack = []
+
+      behaviour.middleware.map((m, index) => {
+        if(behaviour.middleware[index+1])
+          stack.push(m.call(this, behaviour.middleware[index+1]))
+        else
+          stack.push(m.call(this, Promise.resolve(true)))
+      })
+
+      yield stack
+    })
   })
   koaApp.use(router.routes())
   koaApp.use(router.allowedMethods())
