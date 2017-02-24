@@ -193,7 +193,7 @@ const edie = function (directory, koaApp) {
   behaviours.map(behaviour => {
     /**
      * This monstrosity is here because the current version of koa-router does not terminate routing at the first match, so all routes matching can get executed.
-     * This is NOT the preferred behaviours, if there is a /user/:id and /user/deleteAll, the latter one should take precedence
+     * This is NOT the preferred behaviour, if there is a /user/:id and /user/deleteAll, the latter one should take precedence
      * Therefore, we create our wrapper generator function that executes the behaviour middleware in order, without the behaviour "polluting" the koa-router next function
      */
     router[behaviour.method](transformRawRoute(behaviour.rawRoute), function * (next) {
