@@ -1,7 +1,7 @@
 {
   "name": "edie",
   "author": "Andrej Sykora",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,12 +13,15 @@
   },
   "main": "src/index",
   "engines": {
-    "node": ">=4.0.0"
+    "node": ">=7.6.0"
   },
   "dependencies": {
-    "koa-router": "^5.4.0"
+    "koa-router": "^7.0.0"
+  },
+  "devDependencies": {
+    "koa": "^2.0.0"
   },
   "peerDependencies": {
-    "koa": "^1.2.4"
+    "koa": "^2.0.0"
   }
 }
