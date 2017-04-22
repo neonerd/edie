@@ -1,5 +1,6 @@
 module.exports = async function (ctx, next) {
   ctx.body = {
-    status: 'OK'
+    status: 'success',
+    id: ctx.params.id
   }
 }

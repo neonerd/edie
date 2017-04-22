@@ -1,12 +1,12 @@
 module.exports = {
   middleware: [
-    function * () {
-      this.body = {
+    async function (ctx) {
+      ctx.body = {
         status: 'OK',
         page: 'articles',
-        middleware: this.middleware
+        middleware: ctx.middleware
       }
     }
   ],
-  tags: ['pagination']
+  plugins: ['pagination']
 } 

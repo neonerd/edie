@@ -1,5 +1,5 @@
-module.exports = function * () {
-  this.body = {
+module.exports = async function (ctx, next) {
+  ctx.body = {
     status: 'OK',
     page: 'index'
   }
