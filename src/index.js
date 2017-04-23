@@ -1,9 +1,13 @@
+/**
+* Edie 3.0
+* Andrej Sykora <as@andrejsykora.com>
+* Easy convention-over-configuration Koa routing
+* See examples/basic.js for basic usage
+* See GitHub repository for full documentation
+**/
+
 const DEFAULTS = {
-  // if a single behaviour begins with one of these prefixes, it's either propagated on the current level or on every level below
-  // if the prefix is followed by anything else, it becomes a "tagged" behaviour only injected into other behaviours if specifically requested
-  NESTED_BEHAVIOUR_PREFIX: '__',
-  SINGLE_LEVEL_BEHAVIOUR_PREFIX: '_',
-  // scope is separated for files
+// scope is separated for files
   BEHAVIOUR_NAME_SEPARATOR: '.',
   // if a directory begins with this, it's treated as :name in the route
   PARAMETER_ROUTE_PREFIX: /_/g,
@@ -18,53 +22,21 @@ const fs = require('fs')
 // external dependencies
 const koaRouter = require('koa-router')
 
-/**
- * [behaviourStructure description]
- * @param  {[type]} fileName      [description]
- * @param  {[type]} directoryPath [description]
- * @return {[type]}               [description]
- */
-const behaviourStructure = function (fileName, previousDirectories, rootDirectory) {
-
+// sub-functions
+function processBehaviourFile (filePath, fileName) {
+  // determine the http method to use
   const fileNameTokens = fileName.split(DEFAULTS.BEHAVIOUR_NAME_SEPARATOR)
   const name = fileNameTokens[0]
-  // determine the http method to use
   let methodType = 'get'
   if (fileNameTokens.length > 2) {
     methodType = fileNameTokens[1]
   }
 
-  // determine the type to use
-  const nestedRegex = new RegExp('^' + DEFAULTS.NESTED_BEHAVIOUR_PREFIX)
-  const singleRegex = new RegExp('^' + DEFAULTS.SINGLE_LEVEL_BEHAVIOUR_PREFIX)
-
-  let type = 'normal'
-  let tag = ''
-  const singleResult = name.match(singleRegex)
-  if (singleResult !== null) {
-    type = 'single'
-    tag = name.replace(singleRegex, '')
-  }
-  const nestedResult = name.match(nestedRegex)
-  if (nestedResult !== null) {
-    type = 'nested'
-    tag = name.replace(nestedRegex, '')
-  }
-
-  // determine the raw route path
-  let rawRouteTokens = []
-  if (name !== DEFAULTS.ROOT_FILE) {
-    rawRouteTokens = previousDirectories.concat([fileNameTokens[0]])
-  } else {
-    rawRouteTokens = previousDirectories
-  }
-  const rawRoute = '/' + rawRouteTokens.join('/')
-
-  // fetch the middleware and tags to use
+  // fetch the middleware and plugins to use
   let middleware = []
-  let tags = []
+  let plugins = []
 
-  let behaviourExport = require(path.join(rootDirectory, previousDirectories.join('/'), fileName))
+  let behaviourExport = require(filePath)
   if (behaviourExport.default !== undefined) {
     behaviourExport = behaviourExport.default
   }
@@ -73,143 +45,152 @@ const behaviourStructure = function (fileName, previousDirectories, rootDirector
     middleware.push(behaviourExport)
   } else {
     middleware = middleware.concat(behaviourExport.middleware)
-    tags = tags.concat(behaviourExport.tags)
+    plugins = plugins.concat(behaviourExport.plugins)
   }
 
-  // return the behaviour structure
   return {
-    name,
-    rawRoute,
-    type,
-    method: methodType,
     middleware,
-    tags,
-    tag
+    plugins,
+    method: methodType,
+    filePath,
+    directoryPath: path.dirname(filePath),
+    routeName: name
   }
-
 }
 
-/**
- * Traverses the directory tree and 
- * @param  {[type]} startingDirectory   [description]
- * @param  {[type]} previousDirectories [description]
- * @param  {[type]} inheritedBehaviours [description]
- * @return {[type]}                     [description]
- */
-const traverseDirectories = function (startingDirectory, previousDirectories, inheritedBehaviours) {
+function processPluginFile (filePath, fileName) {
+  // determine the http method to use
+  const fileNameTokens = fileName.split(DEFAULTS.BEHAVIOUR_NAME_SEPARATOR)
+  const name = fileNameTokens[0]
 
-  if (previousDirectories === undefined) {
-    previousDirectories = []
-  }
-  if (inheritedBehaviours === undefined) {
-    inheritedBehaviours = []
+  // fetch the middleware and plugins to use
+  let middleware = []
+  let plugins = []
+
+  let pluginExport = require(filePath)
+  if (pluginExport.default !== undefined) {
+    pluginExport = pluginExport.default
   }
 
-  let currentContents = []
-  if (previousDirectories.length > 0) {
-    currentContents = fs.readdirSync(path.join(startingDirectory, previousDirectories.join('/')))
+  if (typeof pluginExport === 'function') {
+    middleware.push(pluginExport)
   } else {
-    currentContents = fs.readdirSync(startingDirectory)
+    middleware = middleware.concat(pluginExport.middleware)
   }
-  const nextDirectories = []
-  const currentBehaviours = []
 
-  currentContents.map(fileName => {
-    let filePath = ''
-    if (previousDirectories.length === 0) {
-      filePath = path.join(startingDirectory, fileName)
-    } else {
-      filePath = path.join(startingDirectory, previousDirectories.join('/'), fileName)
-    }
+  return {
+    middleware,
+    name
+  }
+}
+
+function getBehaviours (directory) {
+  let behaviours = []
+
+  const directoryContents = fs.readdirSync(directory)
+
+  // Either recursively scan the next directory, or process the file and add it to the result array
+  directoryContents.map(fileName => {
+    const filePath = path.join(directory, fileName)
     const stat = fs.statSync(filePath)
     if (stat.isDirectory()) {
-      nextDirectories.push(fileName)
+      behaviours.push.apply(behaviours, getBehaviours(filePath))
     } else {
-      currentBehaviours.push(behaviourStructure(fileName, previousDirectories, startingDirectory))
+      behaviours.push(processBehaviourFile(filePath, fileName))
     }
   })
 
-  const nextInheritedBehaviours = inheritedBehaviours.concat([])
-  const singleLevelBehaviours = []
-  let usedBehaviours = []
+  return behaviours
+}
 
-  currentBehaviours.map(behaviour => {
-    if (behaviour.type === 'single') {
-      singleLevelBehaviours.push(behaviour)
-    }
-    if (behaviour.type === 'nested') {
-      nextInheritedBehaviours.push(behaviour)
-    }
-    if (behaviour.type === 'normal') {
-      usedBehaviours.push(behaviour)
+function getPlugins (directory) {
+  let plugins = []
+
+  const directoryContents = fs.readdirSync(directory)
+
+  // Either recursively scan the next directory, or process the file and add it to the result array
+  directoryContents.map(fileName => {
+    const filePath = path.join(directory, fileName)
+    const stat = fs.statSync(filePath)
+    if (stat.isDirectory()) {
+      plugins.push.apply(plugins, getPlugins(filePath))
+    } else {
+      plugins.push(processPluginFile(filePath, fileName))
     }
   })
 
-  singleLevelBehaviours.concat(nextInheritedBehaviours).map(behaviourToInject => {
-    usedBehaviours.map(behaviour => {
-      if (behaviourToInject.tag === '' || behaviour.tags.indexOf(behaviourToInject.tag) > -1) {
-        behaviour.middleware = behaviourToInject.middleware.concat(behaviour.middleware)
-      }
-      return behaviour
-    })
+  return plugins
+}
+
+function generatePluginsMap (plugins) {
+  const pluginsMap = {}
+
+  plugins.map(plugin => {
+    if (pluginsMap[plugin.name] !== undefined) {
+      throw new Error('Edie: It seems you have two plugins with same name. This is not supported.')
+    }
+
+    pluginsMap[plugin.name] = plugin
   })
 
-  nextDirectories.map(nextDirectory => {
-    usedBehaviours = usedBehaviours.concat(
-        traverseDirectories(
-          startingDirectory,
-          previousDirectories.concat([nextDirectory]), 
-          nextInheritedBehaviours
-        )
-      )
-  })
-  
-  return usedBehaviours
-
+  return pluginsMap
 }
 
 /**
- * Transforms a path-route string into koaRouter route string
- * @param  {[type]} rawRoute [description]
- * @return {[type]}          [description]
+ * 
+ * !Mutates the router instance.
  */
-const transformRawRoute = function (rawRoute) {
-  return rawRoute.replace(DEFAULTS.PARAMETER_ROUTE_PREFIX, ':')
-}
+function applyBehavioursToRouter (behaviours, plugins, router, rootDirectory) {
 
-/**
- * Inject the behaviours into the app using koa-router
- * ! Mutates the app object
- * @param  {[type]} directory [description]
- * @param  {[type]} koaApp    [description]
- * @return {[type]}           [description]
- */
-const edie = function (directory, koaApp) {
-  // first we need to scan the directory
-  // create the behaviours array
-  const behaviours = traverseDirectories(directory)
-  // now we apply each behaviour and its middleware via koa-router
-  const router = koaRouter()
+  const pluginsMap = generatePluginsMap(plugins)
+
   behaviours.map(behaviour => {
-    /**
-     * This monstrosity is here because the current version of koa-router does not terminate routing at the first match, so all routes matching can get executed.
-     * This is NOT the preferred behaviour, if there is a /user/:id and /user/deleteAll, the latter one should take precedence
-     * Therefore, we create our wrapper generator function that executes the behaviour middleware in order, without the behaviour "polluting" the koa-router next function
-     */
-    router[behaviour.method](transformRawRoute(behaviour.rawRoute), function * (next) {
-      for (let index in behaviour.middleware) {
-        if(behaviour.middleware[index+1]) {
-          yield behaviour.middleware[index].call(this, behaviour.middleware[index+1])
-        }
-        else {
-          yield behaviour.middleware[index].call(this, Promise.resolve(true))
-        }
+    const routePathParts = []
+
+    routePathParts.push(path.relative(rootDirectory, behaviour.directoryPath)
+    .replace(new RegExp('\\' + path.sep, 'g'), '/')
+    .replace(DEFAULTS.PARAMETER_ROUTE_PREFIX, ':'))
+
+    if (behaviour.routeName !== 'index') {
+      routePathParts.push(behaviour.routeName)
+    }
+
+    const routePath = '/' + routePathParts.join('/')
+    const middlewareToInject = []
+
+    // Apply plugins if any
+    behaviour.plugins.map(pluginName => {
+      if (pluginsMap[pluginName] === undefined) {
+        throw new Error('Edie: Behaviour ' + routePath + ' is requesting a plugin that does not exist.')
       }
+
+      Array.prototype.push.apply(middlewareToInject, pluginsMap[pluginName].middleware)
     })
+
+    // Apply main behaviour middleware
+    Array.prototype.push.apply(middlewareToInject, behaviour.middleware)
+
+    // Attach the route path last
+    middlewareToInject.unshift(routePath)
+
+    router[behaviour.method].apply(router, middlewareToInject)
   })
-  koaApp.use(router.routes())
-  koaApp.use(router.allowedMethods())
-  return koaApp
+
 }
 
+// main function
+function edie (behavioursDirectory, pluginsDirectory) {
+
+  const router = new koaRouter()
+  const behaviours = getBehaviours(behavioursDirectory)
+  const plugins = pluginsDirectory ? getPlugins(pluginsDirectory) : []
+
+  applyBehavioursToRouter(behaviours, plugins, router, behavioursDirectory)
+
+  return router
+
+}
+
+// export
 module.exports = edie
+

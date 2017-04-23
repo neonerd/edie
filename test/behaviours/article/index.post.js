@@ -1,4 +1,4 @@
-module.exports = async function (ctx, next) {
+module.exports = async function (ctx) {
   ctx.body = {
     status: 'OK'
   }
